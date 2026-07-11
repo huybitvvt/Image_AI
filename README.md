@@ -29,6 +29,23 @@ Chạy workflow → mỗi node hiện kết quả ngay trên canvas:
 
 ## Cài đặt & chạy nhanh
 
+### Yêu cầu
+
+- Python 3.10 trở lên
+- Node.js 18 trở lên
+- Git
+- API key nếu dùng provider thật:
+  - `GEMINI_API_KEY` cho Gemini
+  - `OPENAI_API_KEY` cho OpenAI
+  - hoặc đăng nhập Codex/OpenAI trong phần **Cài đặt**
+
+Clone repo:
+
+```bash
+git clone https://github.com/huybitvvt/Image_AI.git
+cd Image_AI
+```
+
 Script bootstrap tự lo Python ≥3.10, Node ≥18, deps, build frontend rồi chạy app + mở trình duyệt.
 
 ```powershell
@@ -42,6 +59,35 @@ bash run.sh
 ```
 
 Thêm `-Dev` / `--dev` để chạy dev mode, `-Rebuild` / `--rebuild` để build lại frontend.
+
+Sau khi chạy, mở app tại:
+
+- Chế độ build/desktop: http://127.0.0.1:8000
+- Chế độ dev: http://localhost:5173
+
+### Cấu hình API key
+
+Cách 1: cấu hình trong giao diện:
+
+1. Mở app.
+2. Bấm **Cài đặt**.
+3. Thêm cấu hình model cho `gemini`, `openai`, `codex` hoặc `fake`.
+4. Chọn cấu hình đó trong node AI.
+
+Cách 2: dùng file `.env`:
+
+```powershell
+copy .env.example .env
+```
+
+Sau đó mở `.env` và điền key:
+
+```env
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+```
+
+Muốn test không tốn API key, tạo cấu hình provider `fake` trong **Cài đặt**. Provider này sinh ảnh placeholder offline.
 
 ### Cài thủ công
 
