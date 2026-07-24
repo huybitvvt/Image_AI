@@ -80,3 +80,4 @@ def test_upload_keeps_display_name_and_collection(client):
     listed = client.get("/api/uploads").json()
     assert listed[0]["file_id"] == asset["file_id"]
     assert listed[0]["display_name"] == "san-go.png"
+    assert "modified_ts" not in listed[0]

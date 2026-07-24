@@ -1,0 +1,80 @@
+{
+  "name": "demo-phao-san-go",
+  "nodes": [
+    {
+      "id": "san-go",
+      "type": "load_image",
+      "params": {
+        "file_id": "",
+        "image_label": "Mẫu sàn gỗ"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "width": 280
+    },
+    {
+      "id": "phao",
+      "type": "load_image",
+      "params": {
+        "file_id": "",
+        "image_label": "Mẫu phào chân tường"
+      },
+      "position": {
+        "x": 0,
+        "y": 360
+      },
+      "width": 280
+    },
+    {
+      "id": "phoi-canh",
+      "type": "edit_image",
+      "params": {
+        "provider": "gpt",
+        "prompt": "Create a photorealistic modern living room. Cover the entire floor with the flooring material from Image 1 and install the baseboard or wall molding from Image 2 along every visible wall-floor edge. Preserve the exact material colors, wood grain and proportions from both references. Use a clean wide-angle interior composition with realistic daylight. Do not place loose sample boards, product packages, labels, logos or text inside the room.",
+        "instruction": "Treat the references as material samples. Preserve the exact color, texture and profile of each material and apply them naturally to the architecture."
+      },
+      "position": {
+        "x": 380,
+        "y": 120
+      },
+      "width": 340
+    },
+    {
+      "id": "luu-anh",
+      "type": "save_image",
+      "params": {
+        "prefix": "demo-phao-san-go"
+      },
+      "position": {
+        "x": 820,
+        "y": 160
+      },
+      "width": 260
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-san",
+      "source": "san-go",
+      "sourceHandle": "image",
+      "target": "phoi-canh",
+      "targetHandle": "image"
+    },
+    {
+      "id": "e-phao",
+      "source": "phao",
+      "sourceHandle": "image",
+      "target": "phoi-canh",
+      "targetHandle": "images"
+    },
+    {
+      "id": "e-output",
+      "source": "phoi-canh",
+      "sourceHandle": "image",
+      "target": "luu-anh",
+      "targetHandle": "image"
+    }
+  ]
+}

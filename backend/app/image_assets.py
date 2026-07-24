@@ -76,7 +76,6 @@ def asset_to_api(record: dict, path: Path) -> dict:
         "url": f"/api/uploads/{path.name}",
         "size": st.st_size,
         "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
-        "modified_ts": st.st_mtime,
     }
 
 
@@ -95,8 +94,10 @@ def list_uploads() -> list[dict]:
             "source": "legacy",
             "source_url": "",
         })
-        items.append(asset_to_api(record, path))
-    items.sort(key=lambda item: item["modified_ts"], reverse=True)
+        item = asset_to_api(record, path)
+        item["_mtime"] = path.stat().st_mtime
+        items.append(item)
+    items.sort(key=lambda item: item["_mtime"], reverse=True)
     for item in items:
-        del item["modified_ts"]
+        del item["_mtime"]
     return items
