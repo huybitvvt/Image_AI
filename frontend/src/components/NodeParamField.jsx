@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { uploadImage } from '../api.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { listUploads, uploadImage } from '../api.js'
 import { useImageViewer } from '../ImageViewerContext.jsx'
 import { EyeIcon, UploadIcon, XIcon } from './icons.jsx'
 
@@ -7,10 +7,35 @@ import { EyeIcon, UploadIcon, XIcon } from './icons.jsx'
 // xem ảnh gốc (lightbox) / đổi ảnh khác / gỡ ảnh.
 function ImageUploadField({ value, onChange }) {
   const [uploading, setUploading] = useState(false)
+  const [items, setItems] = useState([])
   const inputRef = useRef(null)
   const { openViewer } = useImageViewer()
   const url = value ? `/api/uploads/${value}` : null
-  const view = () => url && openViewer({ src: url, filename: value })
+  const selected = items.find((item) => item.file_id === value)
+  const view = () => url && openViewer({
+    src: url,
+    filename: selected?.display_name || value,
+  })
+
+  const refresh = useCallback(() => {
+    listUploads().then(setItems).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    window.addEventListener('iw-library-change', refresh)
+    return () => window.removeEventListener('iw-library-change', refresh)
+  }, [refresh])
+
+  const groups = useMemo(() => {
+    const grouped = new Map()
+    for (const item of items) {
+      const key = item.collection || 'Chưa phân nhóm'
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key).push(item)
+    }
+    return [...grouped.entries()]
+  }, [items])
 
   const pickFile = async (file) => {
     if (!file) return
@@ -18,6 +43,7 @@ function ImageUploadField({ value, onChange }) {
     try {
       const { file_id } = await uploadImage(file)
       onChange(file_id)
+      window.dispatchEvent(new Event('iw-library-change'))
     } catch (err) {
       alert(err.message)
     } finally {
@@ -37,19 +63,40 @@ function ImageUploadField({ value, onChange }) {
           e.target.value = '' // cho phép chọn lại cùng một file
         }}
       />
-      {!url ? (
+      <div className="upload-picker-row">
+        <select
+          className="upload-library-select"
+          value={value || ''}
+          disabled={uploading}
+          onFocus={refresh}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">Chọn ảnh trong kho...</option>
+          {value && !selected && <option value={value}>Ảnh đang dùng ({value})</option>}
+          {groups.map(([group, rows]) => (
+            <optgroup key={group} label={group}>
+              {rows.map((item) => (
+                <option key={item.file_id} value={item.file_id}>
+                  {item.display_name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
         <button
           type="button"
-          className="upload-drop"
+          className="icon-btn upload-pick-button"
+          title="Tải ảnh mới từ máy"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
         >
-          <UploadIcon size={15} />
-          <span>{uploading ? 'Đang tải lên...' : 'Chọn ảnh từ máy'}</span>
+          <UploadIcon size={13} />
         </button>
-      ) : (
+      </div>
+      {uploading && <div className="upload-state">Đang tải ảnh lên...</div>}
+      {url && (
         <div className="upload-preview">
-          <img src={url} alt="ảnh đã tải lên" onClick={view} />
+          <img src={url} alt={selected?.display_name || 'ảnh đã tải lên'} onClick={view} />
           <div className="upload-preview-actions">
             <button type="button" className="icon-btn" title="Xem ảnh (phóng to)" onClick={view}>
               <EyeIcon size={13} />
@@ -60,6 +107,9 @@ function ImageUploadField({ value, onChange }) {
             <button type="button" className="icon-btn" title="Gỡ ảnh" onClick={() => onChange('')}>
               <XIcon size={13} />
             </button>
+          </div>
+          <div className="upload-preview-name" title={selected?.display_name || value}>
+            {selected?.display_name || value}
           </div>
         </div>
       )}

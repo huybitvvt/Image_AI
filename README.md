@@ -24,6 +24,10 @@ Chạy workflow → mỗi node hiện kết quả ngay trên canvas:
 - **Ghép nhiều ảnh:** ô **Mô tả ảnh** đặt tên từng ảnh và đi theo ảnh xuống node Sửa ảnh
   ("mặc áo ở Ảnh 1 lên người ở Ảnh 2").
 - **Lưu workflow + lịch sử chạy** kiểu n8n (trạng thái, thời lượng, ảnh kết quả từng lần chạy).
+- **Kho ảnh dùng chung:** upload trực tiếp hoặc nhập cả folder Google Drive public, giữ tên
+  và nhóm ảnh để khách chọn nhanh.
+- **Trang khách riêng:** `/upload` để gửi ảnh và `/create` để chọn ảnh trong kho; workflow
+  tự chạy ngay khi khách đã chọn đủ ảnh đầu vào.
 - **Test offline:** provider `fake` vẽ ảnh placeholder, không gọi mạng, không tốn token.
 - **Giao diện sáng/tối** (Hệ thống / Sáng / Tối), phong cách trung tính, phẳng.
 
@@ -88,6 +92,31 @@ OPENAI_API_KEY=
 ```
 
 Muốn test không tốn API key, tạo cấu hình provider `fake` trong **Cài đặt**. Provider này sinh ảnh placeholder offline.
+
+### Kho ảnh và trang khách
+
+Nhập ảnh từ Google Drive:
+
+1. Trong Google Drive, đặt file/folder thành **Bất kỳ ai có đường liên kết**.
+2. Mở **Thư viện ảnh → Đầu vào**.
+3. Dán link Drive, nhập nhóm ảnh như `Phào vuông` hoặc `Sàn gỗ`, bấm **Nhập từ Drive**.
+4. Ảnh được sao chép về `uploads/`; workflow không còn phụ thuộc link Drive lúc chạy.
+
+Mỗi lần nhập tối đa 50 file. Nhập lại cùng một Drive file sẽ bỏ qua bản đã có.
+
+Luồng dùng cho khách:
+
+1. Tạo workflow có một hoặc nhiều node **Tải ảnh lên**; đặt **Mô tả ảnh** rõ ràng cho
+   từng node, ví dụ `Phào` và `Sàn`.
+2. Nối các node tới bước AI/biến đổi và **Lưu ảnh**, sau đó lưu workflow.
+3. Mở `http://127.0.0.1:8000/create?workflow=TEN_WORKFLOW` hoặc bấm **Trang khách**.
+4. Khách chọn đủ ảnh trong các menu; hệ thống tự chạy và hiện ảnh thành phẩm.
+
+Link upload riêng cho khách: `http://127.0.0.1:8000/upload`.
+
+Khi đưa lên Internet, phải đặt ứng dụng sau lớp đăng nhập/reverse proxy và dùng ổ đĩa
+persistent cho `uploads/`, `outputs/`, `data.db` và `cache/`. Bản hiện tại không có xác
+thực người dùng; không nên mở thẳng cổng 8000 ra Internet.
 
 ### Cài thủ công
 

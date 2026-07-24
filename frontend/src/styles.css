@@ -8,6 +8,7 @@
 @import './styles/workflow-browser-modal.css';
 @import './styles/image-library.css';
 @import './styles/toast.css';
+@import './styles/customer-pages.css';
 
 /* ---------- Design tokens ----------
    Token chia 3 lớp:
@@ -178,6 +179,7 @@ html, body, #root {
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
   transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-hover); }

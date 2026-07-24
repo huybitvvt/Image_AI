@@ -12,6 +12,33 @@
   color: var(--text-faint);
 }
 
+.drive-import {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px 14px 4px;
+}
+.drive-import-fields {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr);
+  gap: 8px;
+}
+.drive-import input {
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12px;
+}
+.drive-import input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .img-library-body {
   overflow-y: auto;
   padding: 12px 14px;
@@ -56,13 +83,31 @@
   padding: 6px 8px;
 }
 
-.img-card-name {
+.img-card-meta {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.img-card-name {
   font-size: 12px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.img-card-group {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .drive-import { grid-template-columns: 1fr; }
+  .drive-import-fields { grid-template-columns: 1fr; }
 }
 
 /* Popup xác nhận — nổi trên modal thư viện. */

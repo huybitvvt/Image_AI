@@ -24,6 +24,7 @@ import { layoutNodes } from './auto-layout.js'
 import {
   AlertIcon,
   CheckIcon,
+  ExternalLinkIcon,
   FolderIcon,
   GearIcon,
   ImageIcon,
@@ -537,6 +538,14 @@ export default function App() {
           <button className="btn" onClick={() => setShowImageLibrary(true)}>
             <ImageIcon size={14} /> Thư viện ảnh
           </button>
+          <a
+            className="btn"
+            href={`/create?workflow=${encodeURIComponent(workflowName)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLinkIcon size={14} /> Trang khách
+          </a>
           <button className="btn" onClick={() => setShowSettings(true)}>
             <GearIcon size={14} /> Cài đặt
           </button>

@@ -4,20 +4,30 @@ Dùng thư mục tạm (monkeypatch config) + TestClient, KHÔNG cần backend c
 Chạy: backend\\.venv\\Scripts\\python.exe -m pytest backend/test_image_library.py -q
 """
 import os
+import io
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    from app import config
+    from app import config, db
     up = tmp_path / "uploads"; up.mkdir()
     out = tmp_path / "outputs"; out.mkdir()
     monkeypatch.setattr(config, "UPLOADS_DIR", up)
     monkeypatch.setattr(config, "OUTPUTS_DIR", out)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "data.db")
+    db.init_db()
     from app.main import app
     return TestClient(app)
+
+
+def _png():
+    data = io.BytesIO()
+    Image.new("RGB", (12, 10), "green").save(data, "PNG")
+    return data.getvalue()
 
 
 def test_list_uploads_filters_and_sorts_newest_first(client):
@@ -54,3 +64,19 @@ def test_delete_missing_returns_404(client):
 def test_delete_path_traversal_rejected(client):
     r = client.delete("/api/uploads/..%2f..%2fsecret.txt")
     assert r.status_code == 404
+
+
+def test_upload_keeps_display_name_and_collection(client):
+    r = client.post(
+        "/api/upload",
+        files={"file": ("san-go.png", _png(), "image/png")},
+        data={"collection": "Sàn gỗ"},
+    )
+    assert r.status_code == 200
+    asset = r.json()
+    assert asset["display_name"] == "san-go.png"
+    assert asset["collection"] == "Sàn gỗ"
+
+    listed = client.get("/api/uploads").json()
+    assert listed[0]["file_id"] == asset["file_id"]
+    assert listed[0]["display_name"] == "san-go.png"

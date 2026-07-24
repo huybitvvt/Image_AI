@@ -2,6 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ReactFlowProvider } from '@xyflow/react'
 import App from './App.jsx'
+import CustomerCreatePage from './components/CustomerCreatePage.jsx'
+import CustomerUploadPage from './components/CustomerUploadPage.jsx'
 import { ToastProvider } from './ToastContext.jsx'
 import { applyTheme, initThemeWatcher } from './ui-settings.js'
 import '@xyflow/react/dist/style.css'
@@ -12,11 +14,18 @@ import './styles.css'
 applyTheme()
 initThemeWatcher()
 
+const path = window.location.pathname.replace(/\/+$/, '') || '/'
+const Root = path === '/upload'
+  ? CustomerUploadPage
+  : path === '/create'
+    ? CustomerCreatePage
+    : App
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ReactFlowProvider>
       <ToastProvider>
-        <App />
+        <Root />
       </ToastProvider>
     </ReactFlowProvider>
   </React.StrictMode>,

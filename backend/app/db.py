@@ -49,6 +49,22 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_exec_wf
                 ON workflow_executions(workflow_name, id DESC);
+            CREATE TABLE IF NOT EXISTS image_assets (
+                file_id      TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                collection   TEXT NOT NULL DEFAULT '',
+                source       TEXT NOT NULL DEFAULT 'upload',
+                source_ref   TEXT NOT NULL DEFAULT '',
+                source_url   TEXT NOT NULL DEFAULT '',
+                content_sha  TEXT NOT NULL DEFAULT '',
+                created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_image_assets_created
+                ON image_assets(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_image_assets_source
+                ON image_assets(source, source_ref);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_image_assets_unique_source
+                ON image_assets(source, source_ref) WHERE source_ref <> '';
         """)
     _migrate_json_workflows()
 
@@ -154,6 +170,53 @@ def workflow_exists(name: str) -> bool:
         row = conn.execute(
             "SELECT 1 FROM workflows WHERE name = ?", (name,)).fetchone()
     return row is not None
+
+
+# ---------- Kho ảnh đầu vào ----------
+
+def save_image_asset(file_id: str, display_name: str, collection: str = "",
+                     source: str = "upload", source_ref: str = "",
+                     source_url: str = "", content_sha: str = "") -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO image_assets "
+            "(file_id, display_name, collection, source, source_ref, source_url, content_sha) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(file_id) DO UPDATE SET "
+            "display_name=excluded.display_name, collection=excluded.collection, "
+            "source=excluded.source, source_ref=excluded.source_ref, "
+            "source_url=excluded.source_url, content_sha=excluded.content_sha",
+            (file_id, display_name, collection, source, source_ref, source_url, content_sha))
+
+
+def list_image_assets() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM image_assets ORDER BY created_at DESC, rowid DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_image_asset_by_source(source: str, source_ref: str) -> dict | None:
+    if not source_ref:
+        return None
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM image_assets WHERE source=? AND source_ref=? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (source, source_ref)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_image_asset(file_id: str) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM image_assets WHERE file_id=?", (file_id,))
+
+
+def update_image_asset_collection(file_id: str, collection: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE image_assets SET collection=? WHERE file_id=?",
+            (collection, file_id))
 
 
 # ---------- Lịch sử thực thi (exec history) ----------

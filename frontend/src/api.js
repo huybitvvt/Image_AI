@@ -4,12 +4,14 @@ export async function fetchNodeTypes() {
   return res.json()
 }
 
-export async function uploadImage(file) {
+export async function uploadImage(file, collection = '') {
   const form = new FormData()
   form.append('file', file)
+  if (collection) form.append('collection', collection)
   const res = await fetch('/api/upload', { method: 'POST', body: form })
-  if (!res.ok) throw new Error('Upload ảnh thất bại.')
-  return res.json()
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || 'Upload ảnh thất bại.')
+  return body
 }
 
 export async function saveWorkflow(workflow, { overwrite = false } = {}) {
@@ -162,4 +164,15 @@ export async function deleteOutput(name) {
   const res = await fetch(`/api/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Xóa ảnh thất bại.')
   return res.json()
+}
+
+export async function importGoogleDrive(url, collection = '') {
+  const res = await fetch('/api/import/google-drive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, collection }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || 'Không nhập được ảnh từ Google Drive.')
+  return body
 }

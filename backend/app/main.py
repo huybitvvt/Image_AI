@@ -2,10 +2,9 @@ import json
 import re
 import time
 import traceback
-import uuid
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +12,8 @@ from pydantic import BaseModel, ValidationError
 
 from . import cache, config, db
 from .engine import run_workflow
-from .image_normalize import normalize_image
+from .drive_import import import_public_drive
+from .image_assets import list_uploads as list_upload_assets, save_upload
 from .models import RunEvent, RunRequest, Workflow
 from .nodes import node_type_metadata
 from .oauth_routes import router as oauth_router
@@ -146,19 +146,29 @@ def list_provider_models(provider: str, body: ProviderModelsIn):
 
 
 @app.post("/api/upload")
-async def upload_image(file: UploadFile):
+async def upload_image(file: UploadFile, collection: str = Form("")):
     ext = (file.filename or "img.png").rsplit(".", 1)[-1].lower()
     if ext not in ("png", "jpg", "jpeg", "webp", "gif", "bmp"):
         return JSONResponse({"error": "Định dạng ảnh không hỗ trợ."}, status_code=400)
-    data = await file.read()
-    # Chuẩn hóa: thu nhỏ ≤ 2048px + nén (chặn upload vài chục MB, base64 nhẹ hơn).
     try:
-        data, out_ext = normalize_image(data)
+        asset, _ = save_upload(
+            await file.read(), file.filename or "image", collection=collection)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    file_id = f"{uuid.uuid4().hex}.{out_ext}"
-    (config.UPLOADS_DIR / file_id).write_bytes(data)
-    return {"file_id": file_id, "url": f"/api/uploads/{file_id}"}
+    return asset
+
+
+class DriveImportIn(BaseModel):
+    url: str
+    collection: str = ""
+
+
+@app.post("/api/import/google-drive")
+def import_google_drive(body: DriveImportIn):
+    try:
+        return import_public_drive(body.url, body.collection)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 def _safe_file(directory, name: str):
@@ -196,7 +206,7 @@ def _list_images(directory, url_prefix: str):
 # List routes registered before /{name} catch-alls so they match first.
 @app.get("/api/uploads")
 def list_uploads():
-    return _list_images(config.UPLOADS_DIR, "/api/uploads")
+    return list_upload_assets()
 
 
 @app.get("/api/outputs")
@@ -214,6 +224,7 @@ def delete_upload(name: str):
     if not path:
         return JSONResponse({"error": "Không tìm thấy file."}, status_code=404)
     path.unlink(missing_ok=True)
+    db.delete_image_asset(name)
     return {"deleted": name}
 
 
@@ -415,4 +426,9 @@ async def ws_run(ws: WebSocket):
 # Frontend không có client-side router (chỉ React Flow) nên không cần history-fallback.
 # Chỉ mount khi có thư mục build (chạy dev với Vite proxy thì SPA_DIR vắng → bỏ qua).
 if config.SPA_DIR.is_dir():
+    @app.get("/upload", include_in_schema=False)
+    @app.get("/create", include_in_schema=False)
+    def customer_page():
+        return FileResponse(config.SPA_DIR / "index.html")
+
     app.mount("/", StaticFiles(directory=config.SPA_DIR, html=True), name="spa")

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ImageIcon, TrashIcon, XIcon } from './icons.jsx'
-import { listUploads, listOutputs, deleteUpload, deleteOutput } from '../api.js'
+import { DownloadIcon, ImageIcon, TrashIcon, XIcon } from './icons.jsx'
+import {
+  deleteOutput,
+  deleteUpload,
+  importGoogleDrive,
+  listOutputs,
+  listUploads,
+} from '../api.js'
 import { useImageViewer } from '../ImageViewerContext.jsx'
 import { useToast } from '../ToastContext.jsx'
 import ConfirmDialog from './confirm-dialog.jsx'
@@ -20,6 +26,9 @@ export default function ImageLibraryModal({ onClose }) {
   const [items, setItems] = useState([])
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [driveUrl, setDriveUrl] = useState('')
+  const [collection, setCollection] = useState('')
+  const [importing, setImporting] = useState(false)
   const [pending, setPending] = useState(null) // { name } chờ xác nhận xóa
   const { openViewer } = useImageViewer()
   const toast = useToast()
@@ -59,9 +68,30 @@ export default function ImageLibraryModal({ onClose }) {
     try {
       await TABS[tab].del(name)
       toast.success('Đã xóa ảnh.')
+      window.dispatchEvent(new Event('iw-library-change'))
       refresh(tab)
     } catch (e) {
       toast.error(e.message)
+    }
+  }
+
+  const importDrive = async (event) => {
+    event.preventDefault()
+    if (!driveUrl.trim()) return
+    setImporting(true)
+    try {
+      const result = await importGoogleDrive(driveUrl.trim(), collection.trim())
+      const failed = result.errors?.length || 0
+      toast.success(
+        `Đã nhập ${result.imported} ảnh${result.skipped ? `, bỏ qua ${result.skipped} ảnh đã có` : ''}.`)
+      if (failed) toast.warn(`${failed} file không phải ảnh hoặc không tải được.`)
+      setDriveUrl('')
+      window.dispatchEvent(new Event('iw-library-change'))
+      await refresh('uploads')
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -87,9 +117,32 @@ export default function ImageLibraryModal({ onClose }) {
           </div>
 
           {tab === 'uploads' && (
-            <div className="img-library-note">
-              Xóa ảnh đầu vào có thể làm hỏng workflow đã lưu đang dùng ảnh đó.
-            </div>
+            <>
+              <form className="drive-import" onSubmit={importDrive}>
+                <div className="drive-import-fields">
+                  <input
+                    type="url"
+                    value={driveUrl}
+                    onChange={(event) => setDriveUrl(event.target.value)}
+                    placeholder="Dán link file hoặc folder Google Drive public"
+                    required
+                  />
+                  <input
+                    type="text"
+                    value={collection}
+                    onChange={(event) => setCollection(event.target.value)}
+                    placeholder="Nhóm ảnh, ví dụ: Phào vuông"
+                  />
+                </div>
+                <button className="btn primary" type="submit" disabled={importing}>
+                  <DownloadIcon size={14} />
+                  {importing ? 'Đang nhập...' : 'Nhập từ Drive'}
+                </button>
+              </form>
+              <div className="img-library-note">
+                Drive phải bật “Bất kỳ ai có đường liên kết”. Ảnh sẽ được sao chép về hệ thống.
+              </div>
+            </>
           )}
 
           <div className="img-library-body">
@@ -104,12 +157,17 @@ export default function ImageLibraryModal({ onClose }) {
                     <button
                       className="img-card-thumb"
                       title="Xem ảnh full-res"
-                      onClick={() => openViewer({ src: it.url, filename: it.name })}
+                      onClick={() => openViewer({ src: it.url, filename: it.display_name || it.name })}
                     >
-                      <img src={it.url} alt={it.name} loading="lazy" />
+                      <img src={it.url} alt={it.display_name || it.name} loading="lazy" />
                     </button>
                     <div className="img-card-foot">
-                      <span className="img-card-name" title={it.name}>{it.name}</span>
+                      <div className="img-card-meta">
+                        <span className="img-card-name" title={it.display_name || it.name}>
+                          {it.display_name || it.name}
+                        </span>
+                        {it.collection && <span className="img-card-group">{it.collection}</span>}
+                      </div>
                       <button
                         className="btn ghost danger"
                         title="Xóa ảnh"
