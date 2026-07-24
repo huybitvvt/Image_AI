@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 import httpx
 
 from .. import config
+from .. import supabase_api as api
 from .base import ProviderError
 
 # Client công khai + endpoint của Codex CLI (redirect_uri đăng ký cứng cổng 1455).
@@ -29,8 +30,14 @@ CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
 REDIRECT_URI = "http://localhost:1455/auth/callback"
+DEVICE_USER_CODE_URL = (
+    "https://auth.openai.com/api/accounts/deviceauth/usercode")
+DEVICE_TOKEN_URL = "https://auth.openai.com/api/accounts/deviceauth/token"
+DEVICE_VERIFICATION_URL = "https://auth.openai.com/codex/device"
+DEVICE_REDIRECT_URI = "https://auth.openai.com/deviceauth/callback"
 SCOPE = "openid profile email offline_access"
 ORIGINATOR = "codex_cli_rs"
+_REMOTE_AUTH_NAME = "__system__:codex_oauth"
 # claim trong id_token chứa account id khi đăng nhập mới
 _AUTH_CLAIM = "https://api.openai.com/auth"
 # refresh trước khi hết hạn để tránh 401 giữa chừng
@@ -95,13 +102,14 @@ def _post_token(data: dict) -> dict:
     return resp.json()
 
 
-def exchange_code(code: str, code_verifier: str) -> dict:
+def exchange_code(code: str, code_verifier: str,
+                  redirect_uri: str = REDIRECT_URI) -> dict:
     """Đổi authorization code lấy token (kết thúc login flow)."""
     return _post_token({
         "grant_type": "authorization_code",
         "code": code,
         "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
     })
 
@@ -115,29 +123,134 @@ def refresh_access_token(refresh_token: str) -> dict:
     })
 
 
-# ---------- auth.json I/O ----------
+# ---------- Device-code flow (dành cho server headless) ----------
+
+def request_device_code() -> dict:
+    """Xin mã đăng nhập một lần từ OpenAI."""
+    try:
+        resp = httpx.post(
+            DEVICE_USER_CODE_URL,
+            json={"client_id": CLIENT_ID},
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(
+            f"Không khởi tạo được đăng nhập device code: {exc}") from exc
+    if resp.status_code >= 400:
+        raise ProviderError(
+            f"OpenAI từ chối cấp mã đăng nhập (HTTP {resp.status_code}). "
+            "Kiểm tra Device Code Authorization trong cài đặt ChatGPT.")
+    try:
+        body = resp.json()
+        interval = max(1, int(body.get("interval") or 5))
+        device_auth_id = body["device_auth_id"]
+        user_code = body.get("user_code") or body["usercode"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProviderError(
+            "OpenAI trả dữ liệu device code không hợp lệ.") from exc
+    return {
+        "device_auth_id": device_auth_id,
+        "user_code": user_code,
+        "interval": interval,
+        "verification_url": DEVICE_VERIFICATION_URL,
+    }
+
+
+def poll_device_code(device_auth_id: str, user_code: str) -> dict | None:
+    """Poll một lần; None nghĩa là người dùng chưa xác nhận trên trình duyệt."""
+    try:
+        resp = httpx.post(
+            DEVICE_TOKEN_URL,
+            json={"device_auth_id": device_auth_id, "user_code": user_code},
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(
+            f"Không kiểm tra được trạng thái device code: {exc}") from exc
+    if resp.status_code in {403, 404}:
+        return None
+    if resp.status_code >= 400:
+        raise ProviderError(
+            f"Đăng nhập device code thất bại (HTTP {resp.status_code}).")
+    try:
+        body = resp.json()
+        verifier = body["code_verifier"]
+        challenge = body["code_challenge"]
+        code = body["authorization_code"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProviderError(
+            "OpenAI trả dữ liệu xác nhận device code không hợp lệ.") from exc
+    expected = base64.urlsafe_b64encode(
+        sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    if not secrets.compare_digest(expected, challenge):
+        raise ProviderError(
+            "PKCE device code không khớp; đã hủy đăng nhập.")
+    return exchange_code(code, verifier, DEVICE_REDIRECT_URI)
+
+
+# ---------- auth.json + Supabase I/O ----------
+
+def _read_remote_auth() -> dict | None:
+    try:
+        if not api.enabled():
+            return None
+        rows = api.select(
+            "model_configs",
+            "api_key",
+            filters={"name": f"eq.{_REMOTE_AUTH_NAME}"},
+            limit=1,
+        )
+        if not rows or not rows[0].get("api_key"):
+            return None
+        return json.loads(rows[0]["api_key"])
+    except (api.SupabaseError, json.JSONDecodeError, TypeError):
+        return None
+
 
 def read_auth() -> dict | None:
     path = config.CODEX_AUTH_FILE
-    if not path.is_file():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    return _read_remote_auth()
 
 
 def write_auth(tokens: dict) -> None:
-    """Ghi đè khối tokens vào auth.json, giữ nguyên các field khác."""
+    """Ghi auth local và lưu bản bền vững trong Supabase khi deploy."""
     path = config.CODEX_AUTH_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing = read_auth() or {}
     existing["auth_mode"] = "chatgpt"
     existing.setdefault("OPENAI_API_KEY", None)
     existing["tokens"] = tokens
     existing["last_refresh"] = _now_iso()
-    path.write_text(json.dumps(existing, ensure_ascii=False, indent=2),
-                    encoding="utf-8")
+    serialized = json.dumps(existing, ensure_ascii=False, indent=2)
+    if api.enabled():
+        try:
+            api.insert(
+                "model_configs",
+                {
+                    "name": _REMOTE_AUTH_NAME,
+                    "provider": "codex",
+                    "api_key": serialized,
+                    "model": "",
+                    "base_url": "",
+                },
+                on_conflict="name",
+            )
+        except api.SupabaseError as exc:
+            raise ProviderError(
+                f"Không lưu được phiên ChatGPT vào Supabase: {exc}") from exc
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(serialized, encoding="utf-8")
+    except OSError as exc:
+        if not api.enabled():
+            raise ProviderError(
+                f"Không lưu được phiên ChatGPT: {exc}") from exc
 
 
 def _now_iso() -> str:

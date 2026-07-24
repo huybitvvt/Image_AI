@@ -212,6 +212,33 @@
 .oauth-status.ok { color: var(--ok); }
 .oauth-status .dim { color: var(--text-faint); }
 .oauth-hint { font-size: 11px; color: var(--text-faint); line-height: 1.5; margin: 0; }
+.oauth-device {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.oauth-device-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.oauth-device-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 20px;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.oauth-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.oauth-device-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
+}
 .config-error {
   padding: 8px 11px;
   background: color-mix(in srgb, var(--err) 8%, transparent);

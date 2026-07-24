@@ -105,8 +105,17 @@ def save_model_config(cfg: ModelConfigIn):
     name = cfg.name.strip()
     if not name:
         return JSONResponse({"error": "Tên cấu hình không được để trống."}, status_code=400)
+    if name.startswith(remote_db.SYSTEM_CONFIG_PREFIX):
+        return JSONResponse({"error": "Tên cấu hình này được hệ thống dành riêng."}, status_code=400)
     if cfg.provider not in PROVIDER_NAMES:
         return JSONResponse({"error": f"Provider không hợp lệ: {cfg.provider}"}, status_code=400)
+    if cfg.id is not None:
+        current = db.get_model_config_by_id(cfg.id)
+        if current and str(current["name"]).startswith(
+                remote_db.SYSTEM_CONFIG_PREFIX):
+            return JSONResponse(
+                {"error": "Không thể sửa cấu hình hệ thống."},
+                status_code=403)
     existing = db.get_model_config(name)
     if existing and existing["id"] != cfg.id:
         return JSONResponse({"error": f"Đã có cấu hình tên '{name}'."}, status_code=400)
@@ -120,6 +129,12 @@ def save_model_config(cfg: ModelConfigIn):
 
 @app.delete("/api/model-configs/{config_id}")
 def delete_model_config(config_id: int):
+    current = db.get_model_config_by_id(config_id)
+    if current and str(current["name"]).startswith(
+            remote_db.SYSTEM_CONFIG_PREFIX):
+        return JSONResponse(
+            {"error": "Không thể xóa cấu hình hệ thống."},
+            status_code=403)
     if not db.delete_model_config(config_id):
         return JSONResponse({"error": "Không tìm thấy cấu hình."}, status_code=404)
     return {"deleted": config_id}

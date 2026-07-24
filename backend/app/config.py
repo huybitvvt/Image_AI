@@ -58,6 +58,11 @@ AI_CONFIG_BASE_URL = os.getenv("AI_CONFIG_BASE_URL", "").strip()
 # File token OAuth ChatGPT của Codex CLI (dùng chung — tránh đăng nhập lại nếu
 # user đã chạy `codex login`). Override qua CODEX_AUTH_FILE nếu cần.
 CODEX_AUTH_FILE = Path(os.getenv("CODEX_AUTH_FILE", Path.home() / ".codex" / "auth.json"))
+# browser: callback localhost:1455 (desktop); device: mã một lần (hosted).
+# auto chọn device trên Render và browser ở local.
+CODEX_OAUTH_MODE = os.getenv("CODEX_OAUTH_MODE", "auto").strip().lower()
+if CODEX_OAUTH_MODE not in {"auto", "browser", "device"}:
+    raise ValueError("CODEX_OAUTH_MODE phải là auto, browser hoặc device.")
 
 # CODEX_DEBUG=1 → ghi log request/response (SSE) của provider codex vào
 # logs/codex/ để soi lỗi khi tạo ảnh treo hoặc thất bại.

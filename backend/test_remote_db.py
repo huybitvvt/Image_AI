@@ -51,3 +51,13 @@ def test_remote_image_upsert_includes_size(monkeypatch):
     assert captured["table"] == "image_assets"
     assert captured["row"]["size_bytes"] == 123
     assert captured["on_conflict"] == "file_id"
+
+
+def test_remote_model_list_hides_system_secrets(monkeypatch):
+    rows = [
+        {"id": 1, "name": "gpt"},
+        {"id": 2, "name": "__system__:codex_oauth", "api_key": "secret"},
+    ]
+    monkeypatch.setattr(api, "select", lambda *_a, **_kw: rows)
+
+    assert remote_db.list_model_configs() == [{"id": 1, "name": "gpt"}]

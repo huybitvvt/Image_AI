@@ -9,6 +9,7 @@ from . import supabase_api as api
 
 
 EXEC_RETENTION = 50
+SYSTEM_CONFIG_PREFIX = "__system__:"
 
 
 def enabled() -> bool:
@@ -57,8 +58,12 @@ def _migrate_json_workflows() -> None:
 
 
 def list_model_configs() -> list[dict]:
-    return api.select(
+    rows = api.select(
         "model_configs", filters=None, order="created_at.asc,id.asc")
+    return [
+        row for row in rows
+        if not str(row.get("name", "")).startswith(SYSTEM_CONFIG_PREFIX)
+    ]
 
 
 def get_model_config(name: str) -> dict | None:

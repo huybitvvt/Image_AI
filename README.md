@@ -17,8 +17,8 @@ Chạy workflow → mỗi node hiện kết quả ngay trên canvas:
 
 - **Canvas kéo–thả:** dựng pipeline bằng cách nối các node, xem preview ảnh ngay trên node.
 - **Đa provider AI:** `gemini` (Gemini 2.5 Flash Image), `openai` (gpt-image-1), `codex`
-  (đăng nhập ChatGPT/OAuth, dùng quota gói ChatGPT). Mỗi provider chỉ cần khai báo API key
-  trong **⚙ Cài đặt** (hoặc qua `.env`).
+  (đăng nhập ChatGPT/OAuth, dùng quota gói ChatGPT). Gemini/OpenAI dùng API key trong
+  **Cài đặt** hoặc `.env`; Codex dùng phiên đăng nhập ChatGPT.
 - **Cache theo node:** node không đổi sẽ dùng lại kết quả cũ (badge **⚡ cache**), không gọi
   lại AI → tiết kiệm token. Đổi param/đầu vào → chỉ node đó + downstream chạy lại.
 - **Ghép nhiều ảnh:** ô **Mô tả ảnh** đặt tên từng ảnh và đi theo ảnh xuống node Sửa ảnh
@@ -139,21 +139,31 @@ Persistent Disk.
 3. Render hỏi ba secret, nhập:
    - `SUPABASE_URL`: Project URL ở bước trên.
    - `SUPABASE_SECRET_KEY`: Secret key `sb_secret_...`.
-   - `OPENAI_API_KEY`: API key OpenAI có quyền dùng `gpt-image-1`.
+   - `OPENAI_API_KEY`: API key OpenAI có quyền dùng `gpt-image-1`; có thể để
+     trống nếu sẽ dùng đăng nhập ChatGPT ở bước 7.
 4. Kiểm tra plan là **Free**, bấm **Apply/Create Blueprint**.
 5. Chờ trạng thái **Live** và mở
    `https://TEN-DICH-VU.onrender.com/api/health`; kết quả phải có
    `{"status":"ok","persistence":"supabase"}`.
 6. Mở trang chính → **Thư viện ảnh**, nhập hai folder Google Drive public vào nhóm
    `Sàn gỗ Robina` và `Phào vuông`.
-7. Gửi khách:
+7. Để dùng quota ChatGPT thay API key: mở trang quản trị → **Cài đặt → Model**,
+   sửa cấu hình `gpt` → chọn **OpenAI (đăng nhập ChatGPT)** → bấm đăng nhập.
+   App mở `https://auth.openai.com/codex/device`; đăng nhập, nhập mã đang hiện
+   trong app, chờ báo thành công rồi lưu cấu hình. Phiên được giữ trong Supabase
+   nên vẫn còn sau khi Render sleep hoặc redeploy.
+8. Gửi khách:
    `https://TEN-DICH-VU.onrender.com/create?workflow=demo-phao-san-go`.
 
 Supabase Free hiện phù hợp demo nhỏ; ảnh được chuẩn hóa trước khi upload để tiết kiệm
 dung lượng và mặc định chỉ giữ 100 ảnh thành phẩm mới nhất (`OUTPUT_RETENTION`).
-Render Free có thể ngủ khi không có truy cập nên lần mở đầu tiên sẽ chậm. OpenAI API
-vẫn tính phí tạo ảnh. Bản public chưa có tài khoản/phân quyền và chưa giới hạn lượt
-tạo, chỉ nên gửi demo có kiểm soát.
+Render Free có thể ngủ khi không có truy cập nên lần mở đầu tiên sẽ chậm. API key
+OpenAI tính phí riêng; đăng nhập ChatGPT dùng quota của gói ChatGPT. Bản public chưa
+có tài khoản/phân quyền và chưa giới hạn lượt tạo, chỉ nên gửi demo có kiểm soát.
+
+Device-code login có thể cần bật **Device Code Authorization** trong phần bảo mật
+ChatGPT hoặc quyền workspace. Phiên ChatGPT dùng chung cho mọi lượt chạy trên server;
+không gửi trang quản trị cho khách và chỉ công khai link `/create`.
 
 ### Cài thủ công
 

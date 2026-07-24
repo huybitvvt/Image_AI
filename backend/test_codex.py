@@ -47,6 +47,110 @@ def test_account_id_from_id_token():
     assert oauth._account_id_from_id_token(f"x.{payload}.y") == "acc-xyz"
 
 
+def test_request_device_code(monkeypatch):
+    captured = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "device_auth_id": "dev-123",
+                "user_code": "ABCD-EFGH",
+                "interval": "3",
+            }
+
+    def post(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr(oauth.httpx, "post", post)
+    result = oauth.request_device_code()
+
+    assert captured["url"].endswith("/deviceauth/usercode")
+    assert captured["json"] == {"client_id": oauth.CLIENT_ID}
+    assert result == {
+        "device_auth_id": "dev-123",
+        "user_code": "ABCD-EFGH",
+        "interval": 3,
+        "verification_url": "https://auth.openai.com/codex/device",
+    }
+
+
+def test_poll_device_code_pending(monkeypatch):
+    class Response:
+        status_code = 403
+
+    monkeypatch.setattr(oauth.httpx, "post", lambda *_a, **_kw: Response())
+    assert oauth.poll_device_code("dev-123", "ABCD-EFGH") is None
+
+
+def test_poll_device_code_exchanges_verified_pkce(monkeypatch):
+    verifier = "test-verifier"
+    challenge = base64.urlsafe_b64encode(
+        oauth.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    captured = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "authorization_code": "auth-code",
+                "code_challenge": challenge,
+                "code_verifier": verifier,
+            }
+
+    monkeypatch.setattr(oauth.httpx, "post", lambda *_a, **_kw: Response())
+
+    def exchange(code, code_verifier, redirect_uri):
+        captured.update(
+            code=code, verifier=code_verifier, redirect_uri=redirect_uri)
+        return {"access_token": "token"}
+
+    monkeypatch.setattr(oauth, "exchange_code", exchange)
+    assert oauth.poll_device_code("dev-123", "ABCD-EFGH") == {
+        "access_token": "token"}
+    assert captured == {
+        "code": "auth-code",
+        "verifier": verifier,
+        "redirect_uri": "https://auth.openai.com/deviceauth/callback",
+    }
+
+
+def test_auth_persists_and_restores_from_supabase(tmp_path, monkeypatch):
+    stored = {}
+    auth_file = tmp_path / ".codex" / "auth.json"
+    monkeypatch.setattr(oauth.config, "CODEX_AUTH_FILE", auth_file)
+    monkeypatch.setattr(oauth.api, "enabled", lambda: True)
+
+    def select(_table, _columns="*", **_kwargs):
+        return [{"api_key": stored["api_key"]}] if stored else []
+
+    def insert(table, row, **kwargs):
+        assert table == "model_configs"
+        assert row["name"] == "__system__:codex_oauth"
+        assert kwargs["on_conflict"] == "name"
+        stored.update(row)
+        return [row]
+
+    monkeypatch.setattr(oauth.api, "select", select)
+    monkeypatch.setattr(oauth.api, "insert", insert)
+
+    tokens = {
+        "id_token": "id",
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "account_id": "account",
+    }
+    oauth.write_auth(tokens)
+    assert auth_file.is_file()
+    auth_file.unlink()
+    assert oauth.read_auth()["tokens"] == tokens
+
+
 def test_sse_parser_done_event():
     lines = [
         'data: {"type":"response.image_generation_call.in_progress"}',

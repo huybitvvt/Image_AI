@@ -3,10 +3,11 @@ import {
   deleteModelConfig,
   getOpenAIOAuthStatus,
   listModelConfigs,
+  pollOpenAIDeviceAuth,
   saveModelConfig,
   startOpenAIOAuth,
 } from '../api.js'
-import { PlusIcon, SaveIcon, XIcon } from './icons.jsx'
+import { ExternalLinkIcon, PlusIcon, SaveIcon, XIcon } from './icons.jsx'
 import ModelField from './model-field.jsx'
 
 const PROVIDERS = [
@@ -27,6 +28,7 @@ export default function SettingsModelTab({ onChanged }) {
   // Trạng thái đăng nhập OpenAI (Codex OAuth)
   const [oauthStatus, setOauthStatus] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [deviceLogin, setDeviceLogin] = useState(null)
 
   const refresh = () => listModelConfigs().then(setConfigs).catch((e) => setErrorMsg(e.message))
   const refreshOauth = () => getOpenAIOAuthStatus().then(setOauthStatus).catch(() => setOauthStatus(null))
@@ -36,16 +38,71 @@ export default function SettingsModelTab({ onChanged }) {
     refreshOauth()
   }, [])
 
+  useEffect(() => {
+    if (!deviceLogin) return undefined
+    let cancelled = false
+    let timer
+
+    const poll = async () => {
+      if (Date.now() >= deviceLogin.expiresAt) {
+        setErrorMsg('Mã đăng nhập đã hết hạn. Bấm đăng nhập để lấy mã mới.')
+        setDeviceLogin(null)
+        setLoggingIn(false)
+        return
+      }
+      try {
+        const result = await pollOpenAIDeviceAuth(deviceLogin.sessionId)
+        if (cancelled) return
+        if (result.state === 'complete') {
+          setOauthStatus(result)
+          setDeviceLogin(null)
+          setLoggingIn(false)
+          return
+        }
+      } catch (err) {
+        if (cancelled) return
+        setErrorMsg(err.message)
+        setDeviceLogin(null)
+        setLoggingIn(false)
+        return
+      }
+      timer = window.setTimeout(poll, deviceLogin.interval * 1000)
+    }
+
+    timer = window.setTimeout(poll, deviceLogin.interval * 1000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [deviceLogin])
+
   const login = async () => {
     setErrorMsg('')
     setLoggingIn(true)
+    const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    const authWindow = isLocal ? null : window.open('about:blank', 'openai-device-login')
+    let waitingForDevice = false
     try {
       const st = await startOpenAIOAuth()
-      setOauthStatus(st)
+      if (st.flow === 'device_code') {
+        waitingForDevice = true
+        setDeviceLogin({
+          sessionId: st.session_id,
+          verificationUrl: st.verification_url,
+          userCode: st.user_code,
+          interval: Math.max(2, Number(st.interval) || 5),
+          expiresAt: Date.now() + Number(st.expires_in || 900) * 1000,
+        })
+        if (authWindow) authWindow.location.href = st.verification_url
+      } else {
+        if (authWindow) authWindow.close()
+        setOauthStatus(st)
+      }
     } catch (err) {
+      if (authWindow) authWindow.close()
       setErrorMsg(err.message)
     } finally {
-      setLoggingIn(false)
+      if (!waitingForDevice) setLoggingIn(false)
     }
   }
 
@@ -67,6 +124,8 @@ export default function SettingsModelTab({ onChanged }) {
   const closeForm = () => {
     setForm(EMPTY_FORM)
     setErrorMsg('')
+    setDeviceLogin(null)
+    setLoggingIn(false)
     setFormOpen(false)
   }
 
@@ -187,11 +246,35 @@ export default function SettingsModelTab({ onChanged }) {
               <div className="oauth-status">Chưa đăng nhập ChatGPT.</div>
             )}
             <button type="button" className="btn" disabled={loggingIn} onClick={login}>
-              {loggingIn ? 'Đang chờ đăng nhập trên trình duyệt…' : '🔑 Đăng nhập OpenAI (ChatGPT)'}
+              {loggingIn ? 'Đang chờ xác nhận đăng nhập…' : 'Đăng nhập OpenAI (ChatGPT)'}
             </button>
+            {deviceLogin && (
+              <div className="oauth-device">
+                <span className="oauth-device-label">Mã đăng nhập một lần</span>
+                <strong className="oauth-device-code">{deviceLogin.userCode}</strong>
+                <div className="oauth-device-actions">
+                  <a
+                    className="btn"
+                    href={deviceLogin.verificationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLinkIcon size={13} /> Mở trang OpenAI
+                  </a>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(deviceLogin.userCode)}
+                  >
+                    Sao chép mã
+                  </button>
+                </div>
+                <span className="oauth-hint">Đăng nhập rồi nhập mã trên trang vừa mở.</span>
+              </div>
+            )}
             <p className="oauth-hint">
-              Dùng quota gói ChatGPT, không cần API key. Token chia sẻ với Codex CLI
-              (~/.codex/auth.json).
+              Dùng quota gói ChatGPT, không cần API key. Bản local dùng phiên Codex CLI;
+              bản online lưu phiên riêng trong Supabase.
             </p>
           </div>
         )}

@@ -133,10 +133,16 @@ export async function getOpenAIOAuthStatus() {
 }
 
 export async function startOpenAIOAuth() {
-  // Backend mở trình duyệt và chờ tới khi đăng nhập xong (có thể mất tới ~3 phút).
   const res = await fetch('/api/oauth/openai/start', { method: 'POST' })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || 'Đăng nhập OpenAI thất bại.')
+  return body
+}
+
+export async function pollOpenAIDeviceAuth(sessionId) {
+  const res = await fetch(`/api/oauth/openai/device/${encodeURIComponent(sessionId)}`)
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error || 'Không kiểm tra được trạng thái đăng nhập.')
   return body
 }
 
