@@ -107,6 +107,9 @@ export default function SettingsModelTab({ onChanged }) {
   }
 
   const set = (name, value) => setForm((f) => ({ ...f, [name]: value }))
+  const changeProvider = (provider) => {
+    setForm((f) => ({ ...f, provider, api_key: '', model: '', base_url: '' }))
+  }
   const editing = form.id !== null
   const providerMeta = PROVIDERS.find((p) => p.value === form.provider)
 
@@ -216,7 +219,7 @@ export default function SettingsModelTab({ onChanged }) {
         </label>
         <label>
           <span>Provider</span>
-          <select value={form.provider} onChange={(e) => set('provider', e.target.value)}>
+          <select value={form.provider} onChange={(e) => changeProvider(e.target.value)}>
             {PROVIDERS.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}

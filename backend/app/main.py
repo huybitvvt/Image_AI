@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
-from . import cache, config, db, supabase_api
+from . import cache, config, db, remote_db, supabase_api
 from .engine import run_workflow
 from .drive_import import import_public_drive
 from .image_assets import (
