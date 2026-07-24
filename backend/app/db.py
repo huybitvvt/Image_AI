@@ -1,9 +1,9 @@
-"""SQLite lưu cấu hình model (API key đặt tên) và workflow đã lưu."""
+"""Lớp persistence: Supabase khi có cấu hình, SQLite khi chạy local."""
 import json
 import sqlite3
 from contextlib import contextmanager
 
-from . import config
+from . import config, remote_db
 
 
 @contextmanager
@@ -19,6 +19,9 @@ def _connect():
 
 
 def init_db() -> None:
+    if remote_db.enabled():
+        remote_db.init_db()
+        return
     with _connect() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS model_configs (
@@ -57,6 +60,7 @@ def init_db() -> None:
                 source_ref   TEXT NOT NULL DEFAULT '',
                 source_url   TEXT NOT NULL DEFAULT '',
                 content_sha  TEXT NOT NULL DEFAULT '',
+                size_bytes   INTEGER NOT NULL DEFAULT 0,
                 created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
             CREATE INDEX IF NOT EXISTS idx_image_assets_created
@@ -65,7 +69,20 @@ def init_db() -> None:
                 ON image_assets(source, source_ref);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_image_assets_unique_source
                 ON image_assets(source, source_ref) WHERE source_ref <> '';
+            CREATE TABLE IF NOT EXISTS output_assets (
+                name       TEXT PRIMARY KEY,
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
         """)
+        columns = {
+            row["name"] for row in
+            conn.execute("PRAGMA table_info(image_assets)").fetchall()
+        }
+        if "size_bytes" not in columns:
+            conn.execute(
+                "ALTER TABLE image_assets "
+                "ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0")
     _bootstrap_model_config()
     _migrate_json_workflows()
 
@@ -105,6 +122,8 @@ def _migrate_json_workflows() -> None:
 # ---------- Cấu hình model (API key đặt tên) ----------
 
 def list_model_configs() -> list[dict]:
+    if remote_db.enabled():
+        return remote_db.list_model_configs()
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM model_configs ORDER BY created_at, id").fetchall()
@@ -112,6 +131,8 @@ def list_model_configs() -> list[dict]:
 
 
 def get_model_config(name: str) -> dict | None:
+    if remote_db.enabled():
+        return remote_db.get_model_config(name)
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM model_configs WHERE name = ?", (name,)).fetchone()
@@ -119,6 +140,8 @@ def get_model_config(name: str) -> dict | None:
 
 
 def get_model_config_by_id(config_id: int) -> dict | None:
+    if remote_db.enabled():
+        return remote_db.get_model_config_by_id(config_id)
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM model_configs WHERE id = ?", (config_id,)).fetchone()
@@ -128,6 +151,9 @@ def get_model_config_by_id(config_id: int) -> dict | None:
 def save_model_config(name: str, provider: str, api_key: str, model: str,
                       base_url: str, config_id: int | None = None) -> int | None:
     """Tạo mới hoặc cập nhật; trả về id, hoặc None nếu id cần cập nhật không tồn tại."""
+    if remote_db.enabled():
+        return remote_db.save_model_config(
+            name, provider, api_key, model, base_url, config_id)
     with _connect() as conn:
         if config_id is not None:
             if api_key == "":  # để trống = giữ key cũ
@@ -147,6 +173,8 @@ def save_model_config(name: str, provider: str, api_key: str, model: str,
 
 
 def delete_model_config(config_id: int) -> bool:
+    if remote_db.enabled():
+        return remote_db.delete_model_config(config_id)
     with _connect() as conn:
         cur = conn.execute("DELETE FROM model_configs WHERE id = ?", (config_id,))
     return cur.rowcount > 0
@@ -155,6 +183,8 @@ def delete_model_config(config_id: int) -> bool:
 # ---------- Workflow ----------
 
 def list_workflows() -> list[dict]:
+    if remote_db.enabled():
+        return remote_db.list_workflows()
     with _connect() as conn:
         rows = conn.execute(
             "SELECT name, updated_at FROM workflows ORDER BY updated_at DESC").fetchall()
@@ -162,6 +192,8 @@ def list_workflows() -> list[dict]:
 
 
 def get_workflow(name: str) -> dict | None:
+    if remote_db.enabled():
+        return remote_db.get_workflow(name)
     with _connect() as conn:
         row = conn.execute(
             "SELECT data FROM workflows WHERE name = ?", (name,)).fetchone()
@@ -169,6 +201,9 @@ def get_workflow(name: str) -> dict | None:
 
 
 def save_workflow(name: str, data: dict) -> None:
+    if remote_db.enabled():
+        remote_db.save_workflow(name, data)
+        return
     with _connect() as conn:
         conn.execute(
             "INSERT INTO workflows (name, data) VALUES (?, ?) "
@@ -178,12 +213,16 @@ def save_workflow(name: str, data: dict) -> None:
 
 
 def delete_workflow(name: str) -> bool:
+    if remote_db.enabled():
+        return remote_db.delete_workflow(name)
     with _connect() as conn:
         cur = conn.execute("DELETE FROM workflows WHERE name = ?", (name,))
     return cur.rowcount > 0
 
 
 def workflow_exists(name: str) -> bool:
+    if remote_db.enabled():
+        return remote_db.workflow_exists(name)
     with _connect() as conn:
         row = conn.execute(
             "SELECT 1 FROM workflows WHERE name = ?", (name,)).fetchone()
@@ -194,20 +233,30 @@ def workflow_exists(name: str) -> bool:
 
 def save_image_asset(file_id: str, display_name: str, collection: str = "",
                      source: str = "upload", source_ref: str = "",
-                     source_url: str = "", content_sha: str = "") -> None:
+                     source_url: str = "", content_sha: str = "",
+                     size_bytes: int = 0) -> None:
+    if remote_db.enabled():
+        remote_db.save_image_asset(
+            file_id, display_name, collection, source, source_ref,
+            source_url, content_sha, size_bytes)
+        return
     with _connect() as conn:
         conn.execute(
             "INSERT INTO image_assets "
-            "(file_id, display_name, collection, source, source_ref, source_url, content_sha) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "(file_id, display_name, collection, source, source_ref, source_url, "
+            "content_sha, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(file_id) DO UPDATE SET "
             "display_name=excluded.display_name, collection=excluded.collection, "
             "source=excluded.source, source_ref=excluded.source_ref, "
-            "source_url=excluded.source_url, content_sha=excluded.content_sha",
-            (file_id, display_name, collection, source, source_ref, source_url, content_sha))
+            "source_url=excluded.source_url, content_sha=excluded.content_sha, "
+            "size_bytes=excluded.size_bytes",
+            (file_id, display_name, collection, source, source_ref, source_url,
+             content_sha, size_bytes))
 
 
 def list_image_assets() -> list[dict]:
+    if remote_db.enabled():
+        return remote_db.list_image_assets()
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM image_assets ORDER BY created_at DESC, rowid DESC").fetchall()
@@ -215,6 +264,8 @@ def list_image_assets() -> list[dict]:
 
 
 def get_image_asset_by_source(source: str, source_ref: str) -> dict | None:
+    if remote_db.enabled():
+        return remote_db.get_image_asset_by_source(source, source_ref)
     if not source_ref:
         return None
     with _connect() as conn:
@@ -226,15 +277,52 @@ def get_image_asset_by_source(source: str, source_ref: str) -> dict | None:
 
 
 def delete_image_asset(file_id: str) -> None:
+    if remote_db.enabled():
+        remote_db.delete_image_asset(file_id)
+        return
     with _connect() as conn:
         conn.execute("DELETE FROM image_assets WHERE file_id=?", (file_id,))
 
 
 def update_image_asset_collection(file_id: str, collection: str) -> None:
+    if remote_db.enabled():
+        remote_db.update_image_asset_collection(file_id, collection)
+        return
     with _connect() as conn:
         conn.execute(
             "UPDATE image_assets SET collection=? WHERE file_id=?",
             (collection, file_id))
+
+
+# ---------- Ảnh đầu ra ----------
+
+def save_output_asset(name: str, size_bytes: int) -> None:
+    if remote_db.enabled():
+        remote_db.save_output_asset(name, size_bytes)
+        return
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO output_assets (name, size_bytes) VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET size_bytes=excluded.size_bytes, "
+            "created_at=datetime('now', 'localtime')",
+            (name, size_bytes))
+
+
+def list_output_assets() -> list[dict]:
+    if remote_db.enabled():
+        return remote_db.list_output_assets()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM output_assets ORDER BY created_at DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_output_asset(name: str) -> None:
+    if remote_db.enabled():
+        remote_db.delete_output_asset(name)
+        return
+    with _connect() as conn:
+        conn.execute("DELETE FROM output_assets WHERE name=?", (name,))
 
 
 # ---------- Lịch sử thực thi (exec history) ----------
@@ -244,6 +332,8 @@ EXEC_RETENTION = 50  # mỗi workflow giữ tối đa N bản ghi gần nhất; 
 
 def create_execution(name: str, mode: str) -> int:
     """Tạo bản ghi exec trạng thái 'running'; trả id để cập nhật khi chạy xong."""
+    if remote_db.enabled():
+        return remote_db.create_execution(name, mode)
     with _connect() as conn:
         cur = conn.execute(
             "INSERT INTO workflow_executions (workflow_name, mode, status) "
@@ -255,6 +345,10 @@ def create_execution(name: str, mode: str) -> int:
 def finish_execution(exec_id: int, status: str, error: str, detail: dict,
                      duration_ms: int | None) -> None:
     """Chốt bản ghi exec (status/error/detail/duration) rồi prune giữ top-50/workflow."""
+    if remote_db.enabled():
+        remote_db.finish_execution(
+            exec_id, status, error, detail, duration_ms)
+        return
     with _connect() as conn:
         conn.execute(
             "UPDATE workflow_executions SET status=?, error=?, detail=?, "
@@ -274,6 +368,8 @@ def finish_execution(exec_id: int, status: str, error: str, detail: dict,
 
 def list_executions(name: str, limit: int, offset: int) -> tuple[list[dict], int]:
     """Trả (rows, total) bản ghi exec của workflow, mới nhất trước, có paging."""
+    if remote_db.enabled():
+        return remote_db.list_executions(name, limit, offset)
     with _connect() as conn:
         total = conn.execute(
             "SELECT COUNT(*) AS c FROM workflow_executions WHERE workflow_name=?",
@@ -288,6 +384,8 @@ def list_executions(name: str, limit: int, offset: int) -> tuple[list[dict], int
 
 def get_execution(exec_id: int) -> dict | None:
     """Bản ghi exec đầy đủ; `detail` parse sẵn thành dict."""
+    if remote_db.enabled():
+        return remote_db.get_execution(exec_id)
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM workflow_executions WHERE id=?", (exec_id,)).fetchone()
@@ -302,12 +400,16 @@ def get_execution(exec_id: int) -> dict | None:
 
 
 def delete_execution(exec_id: int) -> bool:
+    if remote_db.enabled():
+        return remote_db.delete_execution(exec_id)
     with _connect() as conn:
         cur = conn.execute("DELETE FROM workflow_executions WHERE id=?", (exec_id,))
     return cur.rowcount > 0
 
 
 def clear_executions(name: str) -> int:
+    if remote_db.enabled():
+        return remote_db.clear_executions(name)
     with _connect() as conn:
         cur = conn.execute(
             "DELETE FROM workflow_executions WHERE workflow_name=?", (name,))

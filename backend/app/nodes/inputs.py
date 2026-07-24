@@ -1,4 +1,4 @@
-from .. import config
+from ..image_assets import get_upload_bytes
 from .base import BaseNode, Param, Port, register_node
 
 
@@ -31,10 +31,10 @@ class LoadImageNode(BaseNode):
 
     def run(self, inputs, params):
         file_id = params.get("file_id") or ""
-        path = (config.UPLOADS_DIR / file_id).resolve()
-        if not file_id or not path.is_relative_to(config.UPLOADS_DIR) or not path.exists():
+        image = get_upload_bytes(file_id)
+        if image is None:
             raise ValueError("Node 'Tải ảnh lên' chưa có ảnh nào được upload.")
-        return {"image": path.read_bytes()}
+        return {"image": image}
 
 
 @register_node

@@ -2,12 +2,18 @@ services:
   - type: web
     name: image-ai
     runtime: docker
-    plan: starter
+    plan: free
     region: singapore
     healthCheckPath: /api/health
     envVars:
       - key: DATA_DIR
-        value: /var/data
+        value: /tmp/image-workflow
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: image-workflow
       - key: AI_CONFIG_NAME
         value: gpt
       - key: AI_CONFIG_PROVIDER
@@ -17,8 +23,6 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: CACHE_MAX_BYTES
-        value: "1073741824"
-    disk:
-      name: image-ai-data
-      mountPath: /var/data
-      sizeGB: 5
+        value: "209715200"
+      - key: OUTPUT_RETENTION
+        value: "100"

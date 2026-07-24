@@ -33,9 +33,20 @@ for d in (OUTPUTS_DIR, UPLOADS_DIR, WORKFLOWS_DIR, CACHE_DIR / "nodes", CACHE_DI
 
 # Ngưỡng tổng dung lượng blobs cache; vượt → tự xóa blob cũ nhất (LRU theo mtime).
 CACHE_MAX_BYTES = int(os.getenv("CACHE_MAX_BYTES", str(500 * 1024 * 1024)))
+# Giữ số ảnh thành phẩm mới nhất để Supabase Free không đầy Storage.
+OUTPUT_RETENTION = max(1, int(os.getenv("OUTPUT_RETENTION", "100")))
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# Supabase Secret Key chỉ dùng ở backend. Chấp nhận tên legacy service_role để
+# các project cũ vẫn chạy, nhưng ưu tiên sb_secret_* mới.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_SECRET_KEY = (
+    os.getenv("SUPABASE_SECRET_KEY", "").strip()
+    or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+)
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "image-workflow").strip()
 
 # Tạo sẵn một cấu hình model khi khởi động server mới. API key vẫn đọc từ
 # biến môi trường của provider và không bị ghi vào SQLite.

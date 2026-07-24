@@ -6,17 +6,28 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
-from . import cache, config, db
+from . import cache, config, db, supabase_api
 from .engine import run_workflow
 from .drive_import import import_public_drive
-from .image_assets import list_uploads as list_upload_assets, save_upload
+from .image_assets import (
+    delete_upload as delete_upload_asset,
+    get_upload_bytes,
+    list_uploads as list_upload_assets,
+    save_upload,
+)
 from .models import RunEvent, RunRequest, Workflow
 from .nodes import node_type_metadata
 from .oauth_routes import router as oauth_router
+from .output_assets import (
+    delete_output as delete_output_asset,
+    get_output_bytes,
+    list_outputs as list_output_assets,
+    media_type,
+)
 from .providers import PROVIDER_NAMES, model_catalog
 
 db.init_db()
@@ -35,7 +46,10 @@ app.include_router(oauth_router)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "persistence": "supabase" if supabase_api.enabled() else "local",
+    }
 
 
 @app.get("/api/node-types")
@@ -183,31 +197,6 @@ def _safe_file(directory, name: str):
     return path
 
 
-_IMAGE_EXTS = {"png", "jpg", "jpeg", "webp", "gif", "bmp"}
-
-
-def _list_images(directory, url_prefix: str):
-    # Liệt kê file ảnh trong thư mục → mới nhất trước (theo mtime). Bỏ file không phải ảnh.
-    if not directory.is_dir():
-        return []
-    items = []
-    for p in directory.iterdir():
-        if not p.is_file() or p.suffix.lower().lstrip(".") not in _IMAGE_EXTS:
-            continue
-        st = p.stat()
-        items.append({
-            "name": p.name,
-            "url": f"{url_prefix}/{p.name}",
-            "size": st.st_size,
-            "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
-            "_mtime": st.st_mtime,
-        })
-    items.sort(key=lambda x: x["_mtime"], reverse=True)
-    for it in items:
-        del it["_mtime"]
-    return items
-
-
 # List routes registered before /{name} catch-alls so they match first.
 @app.get("/api/uploads")
 def list_uploads():
@@ -216,7 +205,7 @@ def list_uploads():
 
 @app.get("/api/outputs")
 def list_outputs():
-    return _list_images(config.OUTPUTS_DIR, "/api/outputs")
+    return list_output_assets()
 
 
 # Delete routes registered before GET /{name} so Starlette finds the right method
@@ -224,39 +213,34 @@ def list_outputs():
 @app.delete("/api/uploads/{name:path}")
 def delete_upload(name: str):
     # {name:path} captures encoded slashes (%2f) so path-traversal attempts reach this
-    # handler and are rejected by _safe_file instead of leaking to the SPA catch-all.
-    path = _safe_file(config.UPLOADS_DIR, name)
-    if not path:
+    # handler and are rejected by the storage helper instead of reaching the SPA.
+    if not delete_upload_asset(name):
         return JSONResponse({"error": "Không tìm thấy file."}, status_code=404)
-    path.unlink(missing_ok=True)
-    db.delete_image_asset(name)
     return {"deleted": name}
 
 
 @app.delete("/api/outputs/{name:path}")
 def delete_output(name: str):
-    # Same rationale as delete_upload above.
-    path = _safe_file(config.OUTPUTS_DIR, name)
-    if not path:
+    # Cùng cơ chế chặn path traversal như delete_upload.
+    if not delete_output_asset(name):
         return JSONResponse({"error": "Không tìm thấy file."}, status_code=404)
-    path.unlink(missing_ok=True)
     return {"deleted": name}
 
 
 @app.get("/api/uploads/{name}")
 def get_upload(name: str):
-    path = _safe_file(config.UPLOADS_DIR, name)
-    if not path:
+    data = get_upload_bytes(name)
+    if data is None:
         return JSONResponse({"error": "Không tìm thấy file."}, status_code=404)
-    return FileResponse(path)
+    return Response(content=data, media_type=media_type(name))
 
 
 @app.get("/api/outputs/{name}")
 def get_output(name: str):
-    path = _safe_file(config.OUTPUTS_DIR, name)
-    if not path:
+    data = get_output_bytes(name)
+    if data is None:
         return JSONResponse({"error": "Không tìm thấy file."}, status_code=404)
-    return FileResponse(path)
+    return Response(content=data, media_type=media_type(name))
 
 
 @app.get("/api/cache-image/{sha}")

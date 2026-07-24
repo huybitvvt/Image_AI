@@ -114,29 +114,46 @@ Luồng dùng cho khách:
 
 Link upload riêng cho khách: `http://127.0.0.1:8000/upload`.
 
-Khi đưa lên Internet, phải đặt ứng dụng sau lớp đăng nhập/reverse proxy và dùng ổ đĩa
-persistent cho `uploads/`, `outputs/`, `data.db` và `cache/`. Bản hiện tại không có xác
-thực người dùng; không nên mở thẳng cổng 8000 ra Internet.
+Khi có `SUPABASE_URL` và `SUPABASE_SECRET_KEY`, ứng dụng tự chuyển metadata,
+workflow và lịch sử sang Supabase Postgres; ảnh đầu vào/thành phẩm sang Supabase
+Storage. Không có hai biến này thì ứng dụng tiếp tục dùng SQLite và filesystem local.
 
-### Triển khai lên Render
+### Tạo Supabase miễn phí
 
-Repo có sẵn `Dockerfile` và `render.yaml`. Blueprint dùng gói **Starter** tại Singapore
-và gắn Persistent Disk 5 GB ở `/var/data`; Render Free không giữ được ảnh/SQLite sau
-mỗi lần deploy.
+1. Tạo project tại [Supabase Dashboard](https://supabase.com/dashboard).
+2. Mở **SQL Editor → New query**, dán toàn bộ file `supabase_setup.sql`, bấm **Run**.
+   File này tạo 5 bảng và bucket private `image-workflow`.
+3. Mở **Project Settings → API Keys**:
+   - Sao chép **Project URL** làm `SUPABASE_URL`.
+   - Sao chép **Secret key** dạng `sb_secret_...` làm `SUPABASE_SECRET_KEY`.
+4. Không dùng Publishable/Anon key cho backend. Không đưa Secret Key vào GitHub,
+   frontend, ảnh chụp hoặc tin nhắn cho khách.
 
-1. Đẩy repo lên GitHub và đăng nhập [Render](https://dashboard.render.com/).
-2. Chọn **New → Blueprint**, kết nối repo rồi chọn file `render.yaml`.
-3. Khi Render hỏi `OPENAI_API_KEY`, nhập API key OpenAI có quyền dùng
-   `gpt-image-1`. Không ghi key vào GitHub.
-4. Xác nhận tạo dịch vụ và Persistent Disk, chờ health check `/api/health` thành công.
-5. Mở URL `https://TEN-DICH-VU.onrender.com`, vào **Thư viện ảnh** và nhập lại hai
-   thư mục Google Drive công khai. Ảnh sẽ được giữ trên disk qua các lần deploy.
-6. Gửi khách:
+### Triển khai Render Free
+
+Repo có sẵn `Dockerfile` và `render.yaml`; dữ liệu lâu dài ở Supabase nên không cần
+Persistent Disk.
+
+1. Đẩy repo lên GitHub và đăng nhập [Render Dashboard](https://dashboard.render.com/).
+2. Chọn **New → Blueprint**, kết nối repo `huybitvvt/Image_AI`.
+3. Render hỏi ba secret, nhập:
+   - `SUPABASE_URL`: Project URL ở bước trên.
+   - `SUPABASE_SECRET_KEY`: Secret key `sb_secret_...`.
+   - `OPENAI_API_KEY`: API key OpenAI có quyền dùng `gpt-image-1`.
+4. Kiểm tra plan là **Free**, bấm **Apply/Create Blueprint**.
+5. Chờ trạng thái **Live** và mở
+   `https://TEN-DICH-VU.onrender.com/api/health`; kết quả phải có
+   `{"status":"ok","persistence":"supabase"}`.
+6. Mở trang chính → **Thư viện ảnh**, nhập hai folder Google Drive public vào nhóm
+   `Sàn gỗ Robina` và `Phào vuông`.
+7. Gửi khách:
    `https://TEN-DICH-VU.onrender.com/create?workflow=demo-phao-san-go`.
 
-Workflow mẫu tự được nhập vào SQLite và cấu hình `gpt` tự được tạo từ các biến
-`AI_CONFIG_*` trong Blueprint. Bản public hiện chưa có tài khoản/phân quyền và chưa
-giới hạn lượt tạo ảnh; chỉ dùng để demo có kiểm soát cho đến khi bổ sung xác thực.
+Supabase Free hiện phù hợp demo nhỏ; ảnh được chuẩn hóa trước khi upload để tiết kiệm
+dung lượng và mặc định chỉ giữ 100 ảnh thành phẩm mới nhất (`OUTPUT_RETENTION`).
+Render Free có thể ngủ khi không có truy cập nên lần mở đầu tiên sẽ chậm. OpenAI API
+vẫn tính phí tạo ảnh. Bản public chưa có tài khoản/phân quyền và chưa giới hạn lượt
+tạo, chỉ nên gửi demo có kiểm soát.
 
 ### Cài thủ công
 
