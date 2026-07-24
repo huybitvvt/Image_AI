@@ -33,6 +33,11 @@ app.add_middleware(
 app.include_router(oauth_router)
 
 
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/node-types")
 def get_node_types():
     return node_type_metadata()

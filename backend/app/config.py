@@ -16,12 +16,17 @@ else:
 
 load_dotenv(ROOT_DIR / ".env")
 
-OUTPUTS_DIR = ROOT_DIR / "outputs"
-UPLOADS_DIR = ROOT_DIR / "uploads"
+# Cho phép host gắn persistent disk cho toàn bộ dữ liệu runtime trong khi
+# frontend và workflow mẫu vẫn được đọc từ image ứng dụng.
+DATA_DIR = Path(os.getenv("DATA_DIR", ROOT_DIR)).expanduser().resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+OUTPUTS_DIR = DATA_DIR / "outputs"
+UPLOADS_DIR = DATA_DIR / "uploads"
 WORKFLOWS_DIR = ROOT_DIR / "workflows"
 # Cache output node trên đĩa (sống qua --reload): nodes/ manifest, blobs/ ảnh dedupe.
-CACHE_DIR = ROOT_DIR / "cache"
-DB_PATH = ROOT_DIR / "data.db"
+CACHE_DIR = DATA_DIR / "cache"
+DB_PATH = DATA_DIR / "data.db"
 
 for d in (OUTPUTS_DIR, UPLOADS_DIR, WORKFLOWS_DIR, CACHE_DIR / "nodes", CACHE_DIR / "blobs"):
     d.mkdir(parents=True, exist_ok=True)
@@ -32,6 +37,13 @@ CACHE_MAX_BYTES = int(os.getenv("CACHE_MAX_BYTES", str(500 * 1024 * 1024)))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# Tạo sẵn một cấu hình model khi khởi động server mới. API key vẫn đọc từ
+# biến môi trường của provider và không bị ghi vào SQLite.
+AI_CONFIG_NAME = os.getenv("AI_CONFIG_NAME", "").strip()
+AI_CONFIG_PROVIDER = os.getenv("AI_CONFIG_PROVIDER", "").strip()
+AI_CONFIG_MODEL = os.getenv("AI_CONFIG_MODEL", "").strip()
+AI_CONFIG_BASE_URL = os.getenv("AI_CONFIG_BASE_URL", "").strip()
+
 # File token OAuth ChatGPT của Codex CLI (dùng chung — tránh đăng nhập lại nếu
 # user đã chạy `codex login`). Override qua CODEX_AUTH_FILE nếu cần.
 CODEX_AUTH_FILE = Path(os.getenv("CODEX_AUTH_FILE", Path.home() / ".codex" / "auth.json"))
@@ -39,4 +51,4 @@ CODEX_AUTH_FILE = Path(os.getenv("CODEX_AUTH_FILE", Path.home() / ".codex" / "au
 # CODEX_DEBUG=1 → ghi log request/response (SSE) của provider codex vào
 # logs/codex/ để soi lỗi khi tạo ảnh treo hoặc thất bại.
 CODEX_DEBUG = os.getenv("CODEX_DEBUG", "").lower() in ("1", "true", "yes")
-LOGS_DIR = ROOT_DIR / "logs"
+LOGS_DIR = DATA_DIR / "logs"

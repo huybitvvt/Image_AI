@@ -66,7 +66,25 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_image_assets_unique_source
                 ON image_assets(source, source_ref) WHERE source_ref <> '';
         """)
+    _bootstrap_model_config()
     _migrate_json_workflows()
+
+
+def _bootstrap_model_config() -> None:
+    """Tạo cấu hình model từ env cho lần khởi động đầu trên server."""
+    name = config.AI_CONFIG_NAME
+    if not name:
+        return
+    provider = config.AI_CONFIG_PROVIDER
+    if provider not in {"openai", "gemini", "codex", "fake"}:
+        raise ValueError(
+            "AI_CONFIG_PROVIDER phải là openai, gemini, codex hoặc fake.")
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO model_configs "
+            "(name, provider, api_key, model, base_url) VALUES (?, ?, '', ?, ?)",
+            (name, provider, config.AI_CONFIG_MODEL, config.AI_CONFIG_BASE_URL),
+        )
 
 
 def _migrate_json_workflows() -> None:

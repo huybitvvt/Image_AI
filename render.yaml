@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: image-ai
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: AI_CONFIG_NAME
+        value: gpt
+      - key: AI_CONFIG_PROVIDER
+        value: openai
+      - key: AI_CONFIG_MODEL
+        value: gpt-image-1
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CACHE_MAX_BYTES
+        value: "1073741824"
+    disk:
+      name: image-ai-data
+      mountPath: /var/data
+      sizeGB: 5

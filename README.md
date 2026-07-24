@@ -118,6 +118,26 @@ Khi đưa lên Internet, phải đặt ứng dụng sau lớp đăng nhập/reve
 persistent cho `uploads/`, `outputs/`, `data.db` và `cache/`. Bản hiện tại không có xác
 thực người dùng; không nên mở thẳng cổng 8000 ra Internet.
 
+### Triển khai lên Render
+
+Repo có sẵn `Dockerfile` và `render.yaml`. Blueprint dùng gói **Starter** tại Singapore
+và gắn Persistent Disk 5 GB ở `/var/data`; Render Free không giữ được ảnh/SQLite sau
+mỗi lần deploy.
+
+1. Đẩy repo lên GitHub và đăng nhập [Render](https://dashboard.render.com/).
+2. Chọn **New → Blueprint**, kết nối repo rồi chọn file `render.yaml`.
+3. Khi Render hỏi `OPENAI_API_KEY`, nhập API key OpenAI có quyền dùng
+   `gpt-image-1`. Không ghi key vào GitHub.
+4. Xác nhận tạo dịch vụ và Persistent Disk, chờ health check `/api/health` thành công.
+5. Mở URL `https://TEN-DICH-VU.onrender.com`, vào **Thư viện ảnh** và nhập lại hai
+   thư mục Google Drive công khai. Ảnh sẽ được giữ trên disk qua các lần deploy.
+6. Gửi khách:
+   `https://TEN-DICH-VU.onrender.com/create?workflow=demo-phao-san-go`.
+
+Workflow mẫu tự được nhập vào SQLite và cấu hình `gpt` tự được tạo từ các biến
+`AI_CONFIG_*` trong Blueprint. Bản public hiện chưa có tài khoản/phân quyền và chưa
+giới hạn lượt tạo ảnh; chỉ dùng để demo có kiểm soát cho đến khi bổ sung xác thực.
+
 ### Cài thủ công
 
 ```powershell

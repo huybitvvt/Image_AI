@@ -9,6 +9,7 @@ vẫn bật ping) — chỉ tắt được qua Python API như dưới đây.
 
 Chạy:  backend\\.venv\\Scripts\\python backend\\run_server.py [--reload]
 """
+import os
 import sys
 from pathlib import Path
 
@@ -18,8 +19,8 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         app_dir=str(Path(__file__).resolve().parent),  # chạy từ đâu cũng được
-        host="127.0.0.1",
-        port=8000,
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "8000")),
         reload="--reload" in sys.argv,
         ws_ping_interval=None,  # tắt keepalive ping (0 KHÔNG tắt)
         ws_ping_timeout=None,
